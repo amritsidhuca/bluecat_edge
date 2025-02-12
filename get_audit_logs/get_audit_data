@@ -1,0 +1,77 @@
+import sys,requests
+import sqlite3
+
+# User configuration section #
+edgeApiUrl = "https://api-customer.edge.bluec.at" # Make sure to have "api-" in the beginning of the URL
+spApiUrl = "https://us.fleet.bluec.at" # PROD: 'us.fleet.bluec.at', PILOT: 'pilot.fleet.bluec.at'
+edgeClientId = "abcd1234-1bc5-1234-5678-6123456abcd"
+edgeClientSecret = "abcd1234-abcd-1234-123345656"
+# ------------------------- #
+starting_ts = "2024-01-01T00:00:00.000Z"
+time_bucket = 15*60 # 15 minutes multiplied by seconds
+
+"startTime=2017-03-24T06:43:09.811Z&endTime=2018-03-24T06:43:09.811"
+
+def setup_db():
+    conn = sqlite3.connect("audit_data.db")
+    cur = conn.cursor()
+    # Check if table exists
+    res = cur.execute("SELECT name FROM sqlite_master WHERE name='edge_object_db'")
+    if res.fetchone() is None:
+        print("Creating table (edge_object_db)")
+        cur.execute("CREATE TABLE edge_object_db(id, type,last_log_ts, last_updated_ts)")
+    else:
+        print("Table (edge_object_db) exists")
+    res = cur.execute("SELECT name FROM sqlite_master WHERE name='edge_audit_log'")
+    if res.fetchone() is None:
+        print("Creating table (edge_audit_log)")
+        cur.execute("CREATE TABLE edge_audit_log(user_id, ip_addr, request_type,timestamp,url,payload,res_ts,res_code)")
+    else:
+        print("Table (edge_audit_log) exists")
+
+
+
+
+def login():
+    url = f"{edgeApiUrl}/v1/api/authentication/token"
+    payload = {
+        "grantType": "ClientCredentials",
+        "clientCredentials": {
+            "clientId": edgeClientId,
+            "clientSecret": edgeClientSecret
+        }
+    }
+    headers = {
+        "Content-Type": "application/json"
+    }
+
+    response = requests.request("POST", url, json=payload, headers=headers)
+    if response.status_code == 200:
+        token = response.json()['accessToken']
+    else:
+        print(f"Unable to get Edge API Token. HTTP/{response.status_code} - {response.text}")
+        sys.exit(255)
+    return token
+
+
+def get_audit_data(start_ts,end_ts):
+    url = f"{edgeApiUrl}/v1/api/audit/logs"
+    headers = { 'Authorization': f'Bearer {token}' }
+
+
+# End
+def edge_logout():
+    res = requests.post(f'{edgeApiUrl}/v1/api/authentication/logout', headers=headers)
+    if res.status_code == 204:
+        print('Logged out.')
+    else:
+        print(f'Error logging out. {res.status_code}: {res.text}')
+
+
+if __name__ == "__main__":
+    setup_db()
+    token = login()
+    headers = { 'Authorization': f'Bearer {token}' }
+    if token:
+        get_audit_data()
+        edge_logout()
